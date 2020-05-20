@@ -47,7 +47,7 @@ def parameters(lat,Y,M,O,beta_y,beta_m,beta_o,delta,red,h,trans):
     return  N_lat, n_pop, beta_vec, N_trans
 
 def parameters_infection(PY,PM,PO,T_s,T_i,PYSI,PMSI,POSI, N_time, pop_step):
-    prob_par = np.zeros((8,))
+    prob_par = np.zeros((9,))
     
     prob_par[0] = PY
     prob_par[1] = PM
@@ -57,6 +57,9 @@ def parameters_infection(PY,PM,PO,T_s,T_i,PYSI,PMSI,POSI, N_time, pop_step):
     prob_par[5] = PYSI
     prob_par[6] = PMSI
     prob_par[7] = POSI
+    
+    prob_par[8] = 0.15
+
     return prob_par, N_time, pop_step
 def more_parameters(Ts_min,Ts_max,Ti_min,Ti_max,pop_size,Ts_avg,Ti_avg,Ts_scale,Ti_scale, \
  Tawa_min,Tawa_max,Tawa_avg,Tawa_scale):
@@ -209,7 +212,8 @@ def Population_equilibrate(lattice, N_lat, beta_vec, N_trans):
     for qq in range(0,N_trans):
 
 #        is_Outside = False
-        i,j,k =  random_location(N_lat)#randomly_choose_an_agent(lattice, N_lat)
+        i,j,k = randomly_choose_an_agent(lattice, N_lat)
+        #i,j,k =  random_location(N_lat)#randomly_choose_an_agent(lattice, N_lat)
         if (lattice[i,j,k] == 0):
             continue        
         m,n,o = random_movement(i,j,k,N_lat)
@@ -265,7 +269,16 @@ def randomly_infected(lattice,N_lat):
         lattice[x,y,z] = 7
     if (np.int(lattice[x,y,z]) == 9):
         lattice[x,y,z] = 11
+
+    
+   
     return lattice
+
+def randomly_aware(Counta):
+    awa_ind = np.argwhere((Counta[:,3] == 3) |(Counta[:,3] == 7) | (Counta[:,3] == 11))
+    Counta[awa_ind,8] = 1
+    return Counta
+
 
 def randomly_immune(lattice,N_lat):
     
@@ -312,55 +325,105 @@ def check_all_immunity(lattice, size):
     return y,m,o
 
 
+def awareness_inf(lattice,N_lat,prob_hld,x,Counta):
+    
+    
+    
+    
+    for n in x:
+        i = np.int((Counta[n,0])[0])
+        j = np.int((Counta[n,1])[0])
+        k = np.int((Counta[n,2])[0])
+        prob = ss.truncnorm((0.5*prob_hld)/(prob_hld/10),(1.5*prob_hld )/(prob_hld/10),loc = (prob_hld),scale = (prob_hld/10) ).rvs()
+        Counta = nearest_neighbor_awareness(i, j, k, lattice, N_lat, prob, Counta)
+        
+    
+    return Counta
+def nearest_neighbor_awareness(i,j,k,lattice,N_lat,prob,Counta):
+       
+    S_p = prob
+    ii_ran = range(i-1,i+2)
+    jj_ran = range(j-1,j+2)
+    kk_ran = range(k-1,k+2)
+    for ii in ii_ran:  
+       iii = ii % N_lat
+           
+       for jj in jj_ran:           
+           jjj = jj % N_lat
+           for kk in kk_ran:                                                         
+               kkk = kk % N_lat
+               #spot_check = np.int(lattice[iii,jjj,kkk])
+               if ([iii, jjj, kkk] == [i, j, k]):
+                   continue
 
-
+               rand_val = random.random()
+               awa_check = np.argwhere((Counta[:,0] == iii) & (Counta[:,1] == jjj) & (Counta[:,2] == kkk))
+               
+               if awa_check.size == 0:
+                   continue
+               if (Counta[awa_check,8] == 0) and (S_p > rand_val):
+                   Counta[awa_check,8] = 1
+    return Counta
 def infection(lattice,N_lat,prob_par,x,Counta,red,tot_inf_per,day,N_time):
     
-    exp_time = np.exp(-day/N_time)
+    pyI = prob_par[0]
+    pmI = prob_par[1]
+    poI = prob_par[2]
+    
+    pySI = prob_par[5]
+    pmSI = prob_par[6]
+    poSI = prob_par[7]
+    red_0 = red
+
+    
+    exp_time = 1#np.exp(-day/N_time)
     for i,j,k in zip(x[:,0],x[:,1],x[:,2]):
         S_awa_ind = np.argwhere((Counta[:,0] == i) & (Counta[:,1] == j) & (Counta[:,2] == k))
         if lattice[i,j,k] in [3,7,11]:
             if Counta[S_awa_ind,8] == 1:
 
-                probY = exp_time*(prob_par[0]*(1 - red))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probM = exp_time*(prob_par[1]*(1 - red))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probO = exp_time*(prob_par[2]*(1 - red))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
+                probY = exp_time*ss.truncnorm((0.5*pyI*(1 - red_0) )/(pyI/10),(1.5*pyI*(1 - red_0) )/(pyI/10),loc = (pyI*(1-red_0)),scale = (pyI/10) ).rvs()
+                probM = exp_time*ss.truncnorm((0.5*pmI*(1 - red_0) )/(pmI/10),(1.5*pmI*(1 - red_0) )/(pmI/10),loc = (pmI*(1-red_0)),scale = (pmI/10) ).rvs()
+                probO = exp_time*ss.truncnorm((0.5*poI*(1 - red_0) )/(poI/10),(1.5*poI*(1 - red_0) )/(poI/10),loc = (poI*(1-red_0)),scale = (poI/10) ).rvs()
                 #probY = (prob_par[0]*(1 - red))
                 #probM = (prob_par[1]*(1 - red))
                 #probO = (prob_par[2]*(1 - red))
-               
-                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probY,probM,probO,N_lat)
+                
+                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probY,probM,probO,red_0)
             else:
-                probY = exp_time*(prob_par[0]*(1))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probM = exp_time*(prob_par[1]*(1))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probO = exp_time*(prob_par[2]*(1))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
+                probY = exp_time*ss.truncnorm((0.5*pyI)/(pyI/10),(1.5*pyI )/(pyI/10),loc = (pyI),scale = (pyI/10) ).rvs()
+                probM = exp_time*ss.truncnorm((0.5*pmI)/(pmI/10),(1.5*pmI )/(pmI/10),loc = (pmI),scale = (pmI/10) ).rvs()
+                probO = exp_time*ss.truncnorm((0.5*poI)/(poI/10),(1.5*poI )/(poI/10),loc = (poI),scale = (poI/10) ).rvs()
                 #probY = (prob_par[0]*(1))
                 #probM = (prob_par[1]*(1))
                 #probO = (prob_par[2]*(1))                
+                red_1 = 0
+                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probY,probM,probO,red_1)  
                 
-                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probY,probM,probO,N_lat)  
-        elif lattice[i,j,k] in [2,6,10]:
+        elif (lattice[i,j,k] in [2,6,10]) and (Counta[S_awa_ind,4] >= np.int(0.75*Counta[S_awa_ind,6])):
             if Counta[S_awa_ind,8] == 1:
-                probYSI = exp_time*(prob_par[5]*(1 - red))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probMSI = exp_time*(prob_par[6]*(1 - red))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probOSI = exp_time*(prob_par[7]*(1 - red))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
+                probYSI = exp_time*ss.truncnorm((0.5*pySI*(1 - red_0) )/(pySI/10),(1.5*pySI*(1 - red_0) )/(pySI/10),loc = (pySI*(1-red_0)),scale = (pySI/10 )).rvs()
+                probMSI = exp_time*ss.truncnorm((0.5*pmSI*(1 - red_0) )/(pmSI/10),(1.5*pmSI*(1 - red_0) )/(pmSI/10),loc = (pmSI*(1-red_0)),scale = (pmSI/10) ).rvs()
+                probOSI = exp_time*ss.truncnorm((0.5*poSI*(1 - red_0) )/(poSI/10),(1.5*poSI*(1 - red_0) )/(poSI/10),loc = (poSI*(1-red_0)),scale = (poSI/10) ).rvs()
                 #probYSI = (prob_par[5]*(1 - red))
                 #probMSI = (prob_par[6]*(1 - red))
                 #probOSI = (prob_par[7]*(1 - red))    
                 
-                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probYSI,probMSI,probOSI,N_lat)
+                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probYSI,probMSI,probOSI,red_0)
             else:
-                probYSI = exp_time*(prob_par[5]*(1))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probMSI = exp_time*(prob_par[6]*(1))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
-                probOSI = exp_time*(prob_par[7]*(1))*(np.sin(2*mth.pi*(tot_inf_per))*tot_inf_per + (1.1))
+                probYSI = exp_time*ss.truncnorm((0.5*pySI)/(pySI/10),(1.5*pySI )/(pySI/10),loc = (pySI),scale = (pySI/10) ).rvs()
+                probMSI = exp_time*ss.truncnorm((0.5*pmSI)/(pmSI/10),(1.5*pmSI )/(pmSI/10),loc = (pmSI),scale = (pmSI/10) ).rvs()
+                probOSI = exp_time*ss.truncnorm((0.5*poSI)/(poSI/10),(1.5*poSI )/(poSI/10),loc = (poSI),scale = (poSI/10) ).rvs()
                 #probYSI = (prob_par[5]*(1))
                 #probMSI = (prob_par[6]*(1))
                 #probOSI = (prob_par[7]*(1)) 
-                
-                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probYSI,probMSI,probOSI,N_lat) 
+                red_1 = 0
+                lattice = nearest_neighbor_infection(i,j,k,lattice,N_lat,probYSI,probMSI,probOSI,red_1)
+        else:
+                continue        
     return lattice
 
-def nearest_neighbor_infection(i,j,k,lattice,size,probY,probM,probO,N_lat):
+def nearest_neighbor_infection(i,j,k,lattice,N_lat,probY,probM,probO,red):
 
     ii_ran = range(i-1,i+2)
     jj_ran = range(j-1,j+2)
@@ -376,11 +439,11 @@ def nearest_neighbor_infection(i,j,k,lattice,size,probY,probM,probO,N_lat):
                if ([iii, jjj, kkk] == [i, j, k]) or (spot_check not in [1,5,9]):
                    continue
                elif (spot_check  == 1):
-                   S_p = probY
+                   S_p = probY*(1-red)
                elif (spot_check == 5):
-                   S_p = probM
+                   S_p = probM*(1-red)
                else:
-                   S_p = probO
+                   S_p = probO*(1-red)
                rand_val = random.random()
                #print(spot_check,S_p)
                if ((spot_check in [1,5,9])) and (S_p > rand_val):
@@ -404,11 +467,17 @@ def initial_counter(lattice,time_con, N_time,minf_par):
     Tawa_scale = np.int(minf_par[12])
     
     
+    
     x,y,z = (lattice>0).nonzero()
+
+    
     sample_i = random_sample(Ts_min,Ts_max,Ts_avg,Ts_scale,size)
     sample_r = random_sample(Ti_min,Ti_max,Ti_avg,Ti_scale,size)
-    sample_aware = random_sample(Tawa_min,Tawa_max,Tawa_avg,Tawa_scale,size)
+    sample_aware = random_sample(Tawa_min,Tawa_max,Tawa_avg,Tawa_scale,size)    
     sample_s = random_sample(5,15,10,15,size)
+    
+    
+    
     for i in range(0,size):
         # Column 0-2 -> [i,j,k]
         time_con[i,0] = x[i] 
@@ -495,6 +564,8 @@ def awareness_function(num_infected_perc,delta):
     
     awared = total_pop*(1.0-np.exp(-delta*(num_infected_perc)))
     return awared
+
+
 def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta,beta_vec,minf_par):
     # Define parameters
     total_pop = minf_par[4]
@@ -502,16 +573,26 @@ def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta
     b_y = beta_vec[0]
     b_m = beta_vec[1]
     b_o = beta_vec[2]
-    delta = beta_vec[3]
+    #delta = beta_vec[3]
     red = beta_vec[4]
-    h = beta_vec[5]
-    # Start of infection model is Feb 9th: First act of social distancing starts on March 22
+    #h_1 = beta_vec[5]
+    prob_hld = prob_par[8]
+    # Start of infection model is Feb 9th; First act of social distancing starts on March 22
     law_1 = np.int(42)
+    # Mandatory Social Distance starts on April 7th
     law_2 = np.int(law_1+16)
+    # Law is lifted on May 1
     lifted = np.int(law_2+23)
-    
+    # Safe to go back to regular life 100 days after first infection
+    safe_day = np.int(lifted+100)
     # Randomly infect one person
-    lattice = randomly_infected(lattice,N_lat)
+    #lattice = randomly_infected(lattice,N_lat)
+    initial_inf = False
+    while (not initial_inf):
+        lattice = randomly_infected(lattice,N_lat)
+        init_inf = np.argwhere((lattice == 3) | (lattice == 7) | (lattice == 11))
+        if np.int(len(init_inf)) == np.int(2):
+            initial_inf = True
     #randonly choose 2.5% immune
     initial_immune = False
     while (not initial_immune):
@@ -520,12 +601,26 @@ def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta
         if (y + m + o) == np.int(0.025*total_pop):
             initial_immune = True
     Counta = initial_counter(lattice,Counta, N_time,minf_par)
-    
+    Counta = randomly_aware(Counta)
+    h = 0
     # Time evolve
     for tt in range(0,N_time+1):
-        # Infect people at start of a new day
-        #lattice = infection(lattice,N_lat,prob_par)
-        #Counta = change_S_SI(lattice, Counta,N_lat,total_pop)       
+        # See if law has passed
+        if tt == law_1:
+            h = 1.4
+            prob_hld = 1.5*prob_hld
+        elif tt == law_2:
+            h = 1.6
+            prob_hld = 1.75*prob_hld
+        elif tt == lifted:
+            h = 1.4
+            prob_hld = prob_hld/1.75
+        elif tt == safe_day:
+            h = 0 
+            prob_hld = prob_hld/1.25
+        else:
+            h = 0
+            prob_hld = prob_hld
         # Find out how many is infected
         yxS, yyS,yzS = (lattice == 1).nonzero()
         mxS, myS,mzS = (lattice == 5).nonzero()
@@ -555,12 +650,21 @@ def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta
         mR = len(mxR)
         oR = len(oxR)
         
+        # Find aware people
+        yaw_i = np.argwhere(((Counta[:,3] == 1) | (Counta[:,3] == 2) | (Counta[:,3] == 3) | (Counta[:,3] == 4)) & (Counta[:,8] == 1))
+        maw_i = np.argwhere(((Counta[:,3] == 1) | (Counta[:,3] == 2) | (Counta[:,3] == 3) | (Counta[:,3] == 4)) & (Counta[:,8] == 1))
+        oaw_i = np.argwhere(((Counta[:,3] == 1) | (Counta[:,3] == 2) | (Counta[:,3] == 3) | (Counta[:,3] == 4)) & (Counta[:,8] == 1))
+        
+        yaw_num = len(yaw_i)
+        maw_num = len(maw_i)
+        oaw_num = len(oaw_i)
             
         # Total S,SI,I,R
         Total_S = yS + mS + oS
         Total_SI = ySI + mSI + oSI
         Total_I = yI + mI + oI
         Total_R = yR + mR + oR
+        Total_awa = yaw_num + maw_num + oaw_num
         
         # Move moveable agents        
         info[tt,0] = Total_S
@@ -582,23 +686,33 @@ def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta
         info[tt,13] = oSI
         info[tt,14] = oI
         info[tt,15] = oR
-        info[tt,16] = tt          
+        info[tt,16] = tt   
+        
+        info[tt,17] = Total_awa
+        info[tt,18] = yaw_num
+        info[tt,19] = maw_num
+        info[tt,20] = oaw_num
+        
         
         tot_inf_per = Total_I/total_pop
         
-        num_of_awared = np.round(awareness_function(tot_inf_per, delta))    
+        #num_of_awared = np.round(awareness_function(tot_inf_per, delta))    
         
-        Naware_ind = np.argwhere((Counta[:,8] != 1))
-        for an in range(len(Naware_ind)):
-            if an > num_of_awared-1:
-                break
-            else:
-                samp = random.sample(range(len(Naware_ind)),k = 1)
-                anC = [Naware_ind[iv] for iv in samp]
-                if  Counta[anC,8] < 1:                    
-                    Counta[anC,8] = 1
+        Naware_ind = np.argwhere((Counta[:,8] == 1))
+        Counta  = awareness_inf(lattice,N_lat,prob_hld,Naware_ind,Counta)
+# =============================================================================
+#         Naware_ind = np.argwhere((Counta[:,8] != 1))
+#         for an in range(len(Naware_ind)):
+#             if an > num_of_awared-1:
+#                 break
+#             else:
+#                 samp = random.sample(range(len(Naware_ind)),k = 1)
+#                 anC = [Naware_ind[iv] for iv in samp]
+#                 if  Counta[anC,8] < 1:                    
+#                     Counta[anC,8] = 1
+# =============================================================================
         
-        inf_arr = np.argwhere((lattice == 3) | (lattice == 7) | (lattice == 11) |(lattice == 2) |(lattice == 6) |(lattice == 10))
+        inf_arr = np.argwhere((lattice == 3) | (lattice == 7) | (lattice == 11) |(lattice == 2) |(lattice == 6) |(lattice == 20))
         
         lattice = infection(lattice,N_lat,prob_par,inf_arr,Counta,red,tot_inf_per,tt,N_time)
        
@@ -609,12 +723,7 @@ def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta
             if Counta[si_ind_c[0,0],3] in [1,5,9]:
                 Counta[si_ind_c[0,0],3] = Counta[si_ind_c[0,0],3]+1  
         
-        if tt == law_1:
-            h = 1.4
-        elif tt == law_2:
-            h = 1.6
-        elif tt == lifted:
-            h = 1.2
+
 
         for pop_step in pop_ran:
 
@@ -675,52 +784,51 @@ def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta
                     # moved with probability e^(beta(delatN))
                     lattice[m,n,o] = lattice[i,j,k] 
                     lattice[i,j,k] = 0                 
-                    #lattice = infection(lattice,N_lat,prob_par)
-                    #Counta = change_S_SI(lattice, Counta,N_lat,total_pop)
+
                     c_ind = np.argwhere((Counta[:,0] == i) & (Counta[:,1] == j) & (Counta[:,2] == k))
                     Counta[c_ind,0:3] = [m,n,o]
                     
             
-                #lattice = infection(lattice,N_lat,prob_par)
-                #Counta = change_S_SI(lattice, Counta,N_lat,total_pop)   
+
 # =============================================================================
-#                     xany,yany,zany = (lattice==1).nonzero()
-#                     x,y,z = (lattice ==  1).nonzero()
-#                     x2,y2,z2 = (lattice == 2).nonzero()
-#                     x3,y3,z3 = (lattice == 3).nonzero()
-#                     x4,y4,z4 = (lattice == 4).nonzero()
-#                     xm,ym,zm = (lattice ==  5).nonzero()
-#                     xm2,ym2,zm2 = (lattice == 6).nonzero()
-#                     xm3,ym3,zm3 = (lattice == 7).nonzero()
-#                     xm4,ym4,zm4 = (lattice == 8).nonzero()
-#                     xo,yo,zo = (lattice ==  9).nonzero()
-#                     xo2,yo2,zo2 = (lattice == 10).nonzero()
-#                     xo3,yo3,zo3 = (lattice == 11).nonzero()
-#                     xo4,yo4,zo4 = (lattice == 12).nonzero()
-#                 
-#                     ax.scatter(x,y,z, zdir='z',c='Green',marker = 'o', alpha = 0.5)
-#                     ax.scatter(x2,y2,z2, zdir='z',c='blue', marker = 'o', alpha = 0.5)
-#                     ax.scatter(x3,y3,z3, zdir='z',c='red',marker ='o', alpha = 0.5)
-#                     ax.scatter(x4,y4,z4, zdir='z',c='black',marker ='o', alpha = 0.5)
+# =============================================================================
+#             xany,yany,zany = (lattice==1).nonzero()
+#             x,y,z = (lattice ==  1).nonzero()
+#             x2,y2,z2 = (lattice == 2).nonzero()
+#             x3,y3,z3 = (lattice == 3).nonzero()
+#             x4,y4,z4 = (lattice == 4).nonzero()
+#             xm,ym,zm = (lattice ==  5).nonzero()
+#             xm2,ym2,zm2 = (lattice == 6).nonzero()
+#             xm3,ym3,zm3 = (lattice == 7).nonzero()
+#             xm4,ym4,zm4 = (lattice == 8).nonzero()
+#             xo,yo,zo = (lattice ==  9).nonzero()
+#             xo2,yo2,zo2 = (lattice == 10).nonzero()
+#             xo3,yo3,zo3 = (lattice == 11).nonzero()
+#             xo4,yo4,zo4 = (lattice == 12).nonzero()
 #         
-#                     ax.scatter(xm,ym,zm, zdir='z',c='Green',marker = 'o', alpha = 0.75)
-#                     ax.scatter(xm2,ym2,zm2, zdir='z',c='Blue', marker = 'o', alpha = 0.75)
-#                     ax.scatter(xm3,ym3,zm3, zdir='z',c='red',marker ='o', alpha = 0.75)
-#                     ax.scatter(xm4,ym4,zm4, zdir='z',c='black',marker ='o', alpha = 0.75)
-#                 
-#                     ax.scatter(xo,yo,zo, zdir='z',c='green',marker = 'o')
-#                     ax.scatter(xo2,yo2,zo2, zdir='z',c='blue', marker = 'o')
-#                     ax.scatter(xo3,yo3,zo3, zdir='z',c='red',marker ='o')
-#                     ax.scatter(xo4,yo4,zo4, zdir='z',c='black',marker ='o')
-#                 
-#                     plt.draw()
-#                     plt.pause(.001)
-#                     ax.cla()
+#             ax.scatter(x,y,z, zdir='z',c='Green',marker = 'o', alpha = 0.5)
+#             ax.scatter(x2,y2,z2, zdir='z',c='blue', marker = 'o', alpha = 0.5)
+#             ax.scatter(x3,y3,z3, zdir='z',c='red',marker ='o', alpha = 0.5)
+#             ax.scatter(x4,y4,z4, zdir='z',c='black',marker ='o', alpha = 0.5)
+# 
+#             ax.scatter(xm,ym,zm, zdir='z',c='Green',marker = 'o', alpha = 0.75)
+#             ax.scatter(xm2,ym2,zm2, zdir='z',c='Blue', marker = 'o', alpha = 0.75)
+#             ax.scatter(xm3,ym3,zm3, zdir='z',c='red',marker ='o', alpha = 0.75)
+#             ax.scatter(xm4,ym4,zm4, zdir='z',c='black',marker ='o', alpha = 0.75)
+#         
+#             ax.scatter(xo,yo,zo, zdir='z',c='green',marker = 'o')
+#             ax.scatter(xo2,yo2,zo2, zdir='z',c='blue', marker = 'o')
+#             ax.scatter(xo3,yo3,zo3, zdir='z',c='red',marker ='o')
+#             ax.scatter(xo4,yo4,zo4, zdir='z',c='black',marker ='o')
+#         
+#             plt.draw()
+#             plt.pause(.001)
+#             ax.cla()
+# =============================================================================
 # =============================================================================
                     
         
-        #lattice = infection(lattice,N_lat,prob_par)
-        #Counta = change_S_SI(lattice, Counta,N_lat,total_pop)   
+  
         lattice, Counta = change_status(lattice,Counta,total_pop)
 
 # =============================================================================
@@ -737,52 +845,67 @@ def infection_spreading(lattice,N_lat,step_pop,N_time,prob_par,info,n_pop,Counta
 def avg_spreading(info_avg,N_avg,N_lat,step_pop,N_time,prob_par,information,n_pop,beta_vec,N_trans,minf_par):
        
     for oo in range(0,N_avg):
+        
         start_Int = time.time()
         lattice, Counta = initialize_model(N_lat,beta_vec,N_trans,n_pop)
+        #draw_fig(lattice,N_lat)
         finish_Int = time.time()
         print('Finished initializing',oo,  'in',finish_Int-start_Int, 'secs')
         start_cal = time.time()
         lattice,information,Counta = infection_spreading(lattice, N_lat, step_pop, N_time, prob_par, information, n_pop, Counta, beta_vec,minf_par)
         finish_cal = time.time()
-        print('Finished calculating',oo,' in',finish_cal-start_cal, 'secs','Prediction to end in:',N_avg*finish_Int-(oo+1)*finish_Int,'s')       
-        info_avg[:,0,oo] == information[:,0]
-        info_avg[:,1,oo] == information[:,1]
-        info_avg[:,2,oo] == information[:,2]
-        info_avg[:,3,oo] == information[:,3]
-        info_avg[:,4,oo] == information[:,4]
-        info_avg[:,5,oo] == information[:,5]
-        info_avg[:,6,oo] == information[:,6]
-        info_avg[:,7,oo] == information[:,7]
-        info_avg[:,8,oo] == information[:,8]
-        info_avg[:,9,oo] == information[:,9]
-        info_avg[:,10,oo] == information[:,10]
-        info_avg[:,11,oo] == information[:,11]
-        info_avg[:,12,oo] == information[:,12]
-        info_avg[:,13,oo] == information[:,13]
-        info_avg[:,14,oo] == information[:,14]
-        info_avg[:,15,oo] == information[:,15]
-        info_avg[:,16,oo] == information[:,16]
+        print('Finished calculating',oo,' in',finish_cal-start_cal, 'secs')
+        print('Predicted to end in:',N_avg*(finish_cal-start_cal)-(oo+1)*(finish_cal-start_cal),'s')   
+        
+        info_avg[:,0,oo] = information[:,0]
+        info_avg[:,1,oo] = information[:,1]
+        info_avg[:,2,oo] = information[:,2]
+        info_avg[:,3,oo] = information[:,3]
+        info_avg[:,4,oo] = information[:,4]
+        info_avg[:,5,oo] = information[:,5]
+        info_avg[:,6,oo] = information[:,6]
+        info_avg[:,7,oo] = information[:,7]
+        info_avg[:,8,oo] = information[:,8]
+        info_avg[:,9,oo] = information[:,9]
+        info_avg[:,10,oo] = information[:,10]
+        info_avg[:,11,oo] = information[:,11]
+        info_avg[:,12,oo] = information[:,12]
+        info_avg[:,13,oo] = information[:,13]
+        info_avg[:,14,oo] = information[:,14]
+        info_avg[:,15,oo] = information[:,15]
+        info_avg[:,16,oo] = information[:,16]
+        
+        info_avg[:,17,oo] = information[:,17]
+        info_avg[:,18,oo] = information[:,18]
+        info_avg[:,19,oo] = information[:,19]
+        info_avg[:,20,oo] = information[:,20]
 
     for nn in range(N_time):
-        information[nn,0] == np.mean(info_avg[nn,0,:])
-        information[nn,1] == np.mean(info_avg[nn,1,:])
-        information[nn,2] == np.mean(info_avg[nn,2,:])
-        information[nn,3] == np.mean(info_avg[nn,3,:])
-        information[nn,4] == np.mean(info_avg[nn,4,:])
-        information[nn,5] == np.mean(info_avg[nn,5,:])
-        information[nn,6] == np.mean(info_avg[nn,6,:])
-        information[nn,7] == np.mean(info_avg[nn,7,:])
-        information[nn,8] == np.mean(info_avg[nn,8,:])
-        information[nn,9] == np.mean(info_avg[nn,9,:])
-        information[nn,10] == np.mean(info_avg[nn,10,:])
-        information[nn,11] == np.mean(info_avg[nn,11,:])
-        information[nn,12] == np.mean(info_avg[nn,12,:])
-        information[nn,13] == np.mean(info_avg[nn,13,:])
-        information[nn,14] == np.mean(info_avg[nn,14,:])
-        information[nn,15] == np.mean(info_avg[nn,15,:])
-        information[nn,16] == np.mean(info_avg[nn,16,:])
+        information[nn,0] = np.mean(info_avg[nn,0,:])
+        information[nn,1] = np.mean(info_avg[nn,1,:])
+        information[nn,2] = np.mean(info_avg[nn,2,:])
+        information[nn,3] = np.mean(info_avg[nn,3,:])
+        information[nn,4] = np.mean(info_avg[nn,4,:])
+        information[nn,5] = np.mean(info_avg[nn,5,:])
+        information[nn,6] = np.mean(info_avg[nn,6,:])
+        information[nn,7] = np.mean(info_avg[nn,7,:])
+        information[nn,8] = np.mean(info_avg[nn,8,:])
+        information[nn,9] = np.mean(info_avg[nn,9,:])
+        information[nn,10] = np.mean(info_avg[nn,10,:])
+        information[nn,11] = np.mean(info_avg[nn,11,:])
+        information[nn,12] = np.mean(info_avg[nn,12,:])
+        information[nn,13] = np.mean(info_avg[nn,13,:])
+        information[nn,14] = np.mean(info_avg[nn,14,:])
+        information[nn,15] = np.mean(info_avg[nn,15,:])
+        information[nn,16] = np.mean(info_avg[nn,16,:])
+        information[nn,17] = np.mean(info_avg[nn,17,:])
+        information[nn,18] = np.mean(info_avg[nn,18,:])
+        information[nn,19] = np.mean(info_avg[nn,19,:])
+        information[nn,20] = np.mean(info_avg[nn,20,:])
+        
+        
     #draw_fig(lattice,N_lat)
-    return information, Counta
+    return information, Counta, info_avg
 
 def initialize_model(N_lat, beta_vec, N_trans,n_pop):
     lattice = np.zeros((N_lat,N_lat,N_lat))
@@ -809,19 +932,19 @@ def draw_fig(lattice,N_lat):
     xo3,yo3,zo3 = (lattice == 11).nonzero()
     xo4,yo4,zo4 = (lattice == 12).nonzero()
 
-    ax.scatter(x,y,z, zdir='z',c='Green',marker = 'o', alpha = 1)
-    ax.scatter(x2,y2,z2, zdir='z',c='blue', marker = 'o', alpha = 1)
-    ax.scatter(x3,y3,z3, zdir='z',c='red',marker ='o', alpha = 1)
-    ax.scatter(x4,y4,z4, zdir='z',c='black',marker ='o', alpha = 1)
+    ax.scatter(x,y,z, zdir='z',c='lime',marker = 'o', alpha = 1)
+    ax.scatter(x2,y2,z2, zdir='z',c='aqua', marker = 'o', alpha = 1)
+    ax.scatter(x3,y3,z3, zdir='z',c='hotpink',marker ='o', alpha = 1)
+    ax.scatter(x4,y4,z4, zdir='z',c='silver',marker ='o', alpha = 1)
     
     ax.scatter(xm,ym,zm, zdir='z',c='Green',marker = 'o', alpha = 1)
     ax.scatter(xm2,ym2,zm2, zdir='z',c='Blue', marker = 'o', alpha = 1)
-    ax.scatter(xm3,ym3,zm3, zdir='z',c='red',marker ='o', alpha = 1)
-    ax.scatter(xm4,ym4,zm4, zdir='z',c='black',marker ='o', alpha = 1)
+    ax.scatter(xm3,ym3,zm3, zdir='z',c='magenta',marker ='o', alpha = 1)
+    ax.scatter(xm4,ym4,zm4, zdir='z',c='dimgray',marker ='o', alpha = 1)
     
-    ax.scatter(xo,yo,zo, zdir='z',c='green',marker = 'o',alpha = 1)
-    ax.scatter(xo2,yo2,zo2, zdir='z',c='blue', marker = 'o',alpha = 1)
-    ax.scatter(xo3,yo3,zo3, zdir='z',c='red',marker ='o',alpha = 1)
+    ax.scatter(xo,yo,zo, zdir='z',c='gold',marker = 'o',alpha = 1)
+    ax.scatter(xo2,yo2,zo2, zdir='z',c='darkblue', marker = 'o',alpha = 1)
+    ax.scatter(xo3,yo3,zo3, zdir='z',c='crimson',marker ='o',alpha = 1)
     ax.scatter(xo4,yo4,zo4, zdir='z',c='black',marker ='o',alpha = 1)
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
@@ -840,7 +963,10 @@ def random_sample(t_min,t_max,t_mean,t_scale,t_size):
     prob = prob/prob.sum()
     sample = np.random.choice(samp, size = size_c, p = prob)
     return sample
-
+def random_float_sample(avg,std,size_sam,low,high):
+    arr_holder = ss.truncnorm((low-avg)/std,(high-avg)/std,loc = avg, scale = std)
+    arr = arr_holder.rvs(size_sam)
+    return arr
 
 # =============================================================================
 # 
@@ -852,10 +978,10 @@ def random_sample(t_min,t_max,t_mean,t_scale,t_size):
 
 #N_lat,n_pop,beta,N_trans = parameters(10,60,90,50,1,30000)
 print("Please input Size of lattice:")
-N_lat = 12#int(input()) 
+N_lat = 35#int(input()) 
 print(N_lat)
 print("Please input total population:")
-N_tot_pop =500#int(input()) 
+N_tot_pop =3000#int(input()) 
 print(N_tot_pop)
 print("Please input total time integrated:")
 N_time = 300#int(input()) 
@@ -864,33 +990,38 @@ N_young_pop = np.int(0.3*N_tot_pop)
 N_middle_pop = np.int(0.45*N_tot_pop)
 N_old_pop = np.int(0.25*N_tot_pop)
 #lat,Y,M,O,beta_y,beta_m,beta_o,delta,red,h,trans #np.int(N_tot_pop*4)
-N_lat,n_pop,beta_vec,N_trans = parameters(N_lat,N_young_pop,N_middle_pop,N_old_pop,0.6,0.8,1,1.5,0.075,1.2,150000)
+
+N_lat,n_pop,beta_vec,N_trans = parameters(N_lat,N_young_pop,N_middle_pop,N_old_pop,1*.6,1*.8,1*1,0.65,0.05,1.2,np.int(N_tot_pop*20))
 print("Please input number of observations:")
-N_avg = 1#int(input()) 
+N_avg = 5#int(input()) 
 print(N_avg)
 
 
 total_pop = np.sum(n_pop)
 
-Ts_min = 4; Ts_max = 12;Ti_min=4;Ti_max=12;Ts_avg=8;Ti_avg=8;Ts_scale=Ts_avg/3;Ti_scale=Ti_avg/3
-Tawa_min = 1;Tawa_max=12;Tawa_avg=6;Tawa_scale = Tawa_avg/3
+Ts_min = 4; Ts_max = 14;Ti_min=4;Ti_max=14;Ts_avg=9;Ti_avg=9;Ts_scale=Ts_avg/3;Ti_scale=Ti_avg/3
+Tawa_min = 1;Tawa_max=13;Tawa_avg=6;Tawa_scale = Tawa_avg/3
 
-parameters_inf = np.zeros((8,))
+
 
 parameters_inf,N_time,pop_step = parameters_infection(0.02,0.1,0.11,7,7,.02,.1,.11,N_time, np.int(N_tot_pop*1))
-inform_avg = np.zeros((N_time+1,17,N_avg))
+
+
+
+
+inform_avg = np.zeros((N_time+1,21,N_avg))
 
 
 
 minf_par = more_parameters(Ts_min,Ts_max,Ti_min,Ti_max,total_pop,Ts_avg,Ti_avg,Ts_scale,Ti_scale, \
 Tawa_min,Tawa_max,Tawa_avg,Tawa_scale)
 
-information = np.zeros((N_time+1,17))
+information = np.zeros((N_time+1,21))
 Counta = np.zeros((np.int(total_pop),13))
 
 #fig = plt.figure(figsize=(10, 10))
 #ax = fig.add_subplot(111,projection='3d')
-information, Counta = avg_spreading(inform_avg,N_avg,N_lat,pop_step,N_time,parameters_inf,information,n_pop,beta_vec,N_trans,minf_par)
+information, Counta, inform_avg2 = avg_spreading(inform_avg,N_avg,N_lat,pop_step,N_time,parameters_inf,information,n_pop,beta_vec,N_trans,minf_par)
 
 #plt.interactive(True)
 # =============================================================================
@@ -906,6 +1037,7 @@ plt.legend(loc='upper right')
 plt.vlines(42, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16+23, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
+plt.vlines(42+16+23+100, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.xlabel('Time, (days)')
 plt.ylabel("Percentage of Population, %")
 plt.ylim(0,1)
@@ -922,6 +1054,7 @@ plt.bar(information[:,16],(information[:,1])/N_tot_pop,color = 'blue', label = "
 plt.vlines(42, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16+23, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
+plt.vlines(42+16+23+100, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.legend(loc='upper right')
 plt.xlabel('Time, (days)')
 plt.ylabel("Percentage of Population, %")
@@ -937,6 +1070,7 @@ plt.bar(information[:,16],(information[:,2])/N_tot_pop,color = 'red', label = "I
 plt.vlines(42, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16+23, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
+plt.vlines(42+16+23+100, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.legend(loc='upper right')
 plt.xlabel('Time, (days)')
 plt.ylabel("Percentage of Population, %")
@@ -952,6 +1086,7 @@ plt.bar(information[:,16],(information[:,3])/N_tot_pop,color = 'black', label = 
 plt.vlines(42, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.vlines(42+16+23, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
+plt.vlines(42+16+23+100, 0,max((information[:,1])/N_tot_pop),linestyles = 'dotted')
 plt.legend(loc='upper right')
 plt.xlabel('Time, (days)')
 plt.ylabel("Percentage of Population, %")
@@ -960,4 +1095,4 @@ plt.ylim(0,1)
 plt.xlim(0,N_time)
 plt.show()
 
-fig.savefig("COVID_Total.pdf", format = 'pdf', bbox_inches = "tight")
+fig.savefig("COVID_Total_2.pdf", format = 'pdf', bbox_inches = "tight")
